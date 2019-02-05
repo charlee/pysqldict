@@ -1,6 +1,6 @@
 
-from pysqldict import main
+from pysqldict import open
 
 
-def test_main():
+def test_open():
     pass
