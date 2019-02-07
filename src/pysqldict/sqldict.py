@@ -1,5 +1,11 @@
 import sqlite3
 
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
+
 
 class SqlDict(object):
     def __init__(self, filename):
@@ -7,6 +13,7 @@ class SqlDict(object):
 
     def open(self):
         self.db = sqlite3.connect(self.dbname)
+        self.db.row_factory = dict_factory
         self.cursor = self.db.cursor()
 
     def close(self):
@@ -36,7 +43,7 @@ class SqlDict(object):
             self.cursor.execute('COMMIT')
         except sqlite3.OperationalError:
             self.ensure_table(table_name, data)
-            self.cursor.execute(sql, data.values())
+            self.cursor.execute(sql, list(data.values()))
 
     def infer_columns_from_data(self, data):
         columns = []
@@ -60,11 +67,11 @@ class SqlDict(object):
         sql = 'PRAGMA table_info(%s)' % table_name
         self.cursor.execute(sql)
         columns = self.cursor.fetchall()
-        return {c[1]: c[2] for c in columns}
+        return {c['name']: c['type'] for c in columns}
 
     def create_table(self, table_name, data):
         columns = self.infer_columns_from_data(data)
-        sql = 'CREATE TABLE %s (_id INTEGER PRIMARY KEY AUTOINCREMENT, %s)' % (
+        sql = 'CREATE TABLE `%s` (_id INTEGER PRIMARY KEY AUTOINCREMENT, %s)' % (
             table_name, self.columns_to_sql(columns))
         self.cursor.execute(sql)
 
@@ -78,6 +85,27 @@ class SqlDict(object):
                 sql = 'ALTER TABLE %s ADD COLUMN %s %s' % (table_name, column_name, column_type)
                 self.cursor.execute(sql)
 
+    def select_data(self, table_name, exclude_auto_id=False, **args):
+        keys = list(args.keys())
+        values = [args[k] for k in keys]
+        sql = 'SELECT * FROM `%s`' % table_name
+
+        if keys:
+            criteria = ' AND '.join(['%s=?' % k for k in keys])
+            sql = sql + ' WHERE ' + criteria
+
+        self.cursor.execute(sql, values)
+        data = self.cursor.fetchall()
+
+        # filter out None values
+        data = [{k:v for k, v in d.items() if v is not None} for d in data]
+
+        # filter out auto id (_id)
+        if exclude_auto_id:
+            data = [{k:v for k, v in d.items() if k != '_id'} for d in data]
+
+        return data
+
 
 class SqlDictTable(object):
     def __init__(self, db, table_name):
@@ -89,8 +117,16 @@ class SqlDictTable(object):
         self.db.insert_data(self.table_name, data)
         self.db.close()
 
-    def get(self, **args):
-        pass
+    def get(self, exclude_auto_id=False, **args):
+        items = self.filter(exclude_auto_id=exclude_auto_id, **args)
+        if items:
+            return items[0]
+        else:
+            return None
 
-    def filter(self, **args):
-        pass
+    def filter(self, exclude_auto_id=False, **args):
+        self.db.open()
+        data = self.db.select_data(self.table_name, exclude_auto_id=exclude_auto_id, **args)
+        self.db.close()
+        return data
+
