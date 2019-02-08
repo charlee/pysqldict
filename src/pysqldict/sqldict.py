@@ -1,6 +1,13 @@
 import sqlite3
+from typing import Dict, List, Tuple, Union, NewType, NoReturn
+
+DataValueType = NewType('DataValueType', Union[int, float, str])
+DataType = NewType('DataType', Dict[str, DataValueType])
+ColumnMapType = NewType('ColumnMapType', Dict[str, str])
+
 
 def dict_factory(cursor, row):
+    """Make sqlite3 query return dict instead of tuple list."""
     d = {}
     for idx, col in enumerate(cursor.description):
         d[col[0]] = row[idx]
@@ -8,31 +15,33 @@ def dict_factory(cursor, row):
 
 
 class SqlDict(object):
-    def __init__(self, filename):
+    def __init__(self, filename: str):
         self.dbname = filename
 
-    def open(self):
+    def _open(self):
         self.db = sqlite3.connect(self.dbname)
         self.db.row_factory = dict_factory
         self.cursor = self.db.cursor()
 
-    def close(self):
+    def _close(self):
         self.db.close()
 
-    def table(self, table_name):
+    def table(self, table_name: str) -> 'SqlDictTable':
         return SqlDictTable(self, table_name)
 
-    def ensure_table(self, table_name, data):
+    def _ensure_table(self, table_name: str, data: DataType) -> NoReturn:
+        """Create or alter table according to data to ensure data is insertable."""
         sql = "SELECT tbl_name FROM sqlite_master WHERE tbl_name=?"
         self.cursor.execute(sql, (table_name,))
         tbl = self.cursor.fetchone()
 
         if tbl is None:
-            self.create_table(table_name, data)
+            self._create_table(table_name, data)
         else:
-            self.alter_table(table_name, data)
+            self._alter_table(table_name, data)
 
-    def insert_data(self, table_name, data):
+    def _insert_data(self, table_name: str, data: DataType) -> NoReturn:
+        """Insert data into table_name."""
         sql = "INSERT INTO `%s` (%s) VALUES (%s)" % (
             table_name,
             ', '.join("`%s`" % k for k in data.keys()),
@@ -42,11 +51,12 @@ class SqlDict(object):
             self.cursor.execute(sql, list(data.values()))
             self.cursor.execute('COMMIT')
         except sqlite3.OperationalError:
-            self.ensure_table(table_name, data)
+            self._ensure_table(table_name, data)
             self.cursor.execute(sql, list(data.values()))
 
-    def infer_columns_from_data(self, data):
-        columns = []
+    def _infer_columns_from_data(self, data: DataValueType) -> ColumnMapType:
+        """Infer column types from given data."""
+        columns = {}
         for k, v in data.items():
             if isinstance(v, str):
                 column_type = 'TEXT'
@@ -56,28 +66,32 @@ class SqlDict(object):
                 column_type = 'REAL'
             else:
                 raise TypeError('Unsupported value type: %s' % type(v).__name__)
-            columns.append((k, column_type))
+            columns[k] = column_type
 
         return columns
 
-    def columns_to_sql(self, columns):
-        return ', '.join('%s %s' % (k, v) for k, v in columns)
+    def _columns_to_sql(self, columns: ColumnMapType) -> str:
+        """Join column definitions into SQL expression."""
+        return ', '.join('%s %s' % (k, v) for k, v in columns.items())
 
-    def get_table_columns(self, table_name):
+    def _get_table_columns(self, table_name: str) -> ColumnMapType:
+        """Get the column map for an existing table."""
         sql = 'PRAGMA table_info(%s)' % table_name
         self.cursor.execute(sql)
         columns = self.cursor.fetchall()
         return {c['name']: c['type'] for c in columns}
 
-    def create_table(self, table_name, data):
-        columns = self.infer_columns_from_data(data)
+    def _create_table(self, table_name: str, data: DataType) -> NoReturn:
+        """Create table from given data."""
+        columns = self._infer_columns_from_data(data)
         sql = 'CREATE TABLE `%s` (_id INTEGER PRIMARY KEY AUTOINCREMENT, %s)' % (
-            table_name, self.columns_to_sql(columns))
+            table_name, self._columns_to_sql(columns))
         self.cursor.execute(sql)
 
-    def alter_table(self, table_name, data):
-        columns = self.infer_columns_from_data(data)
-        existing_columns = self.get_table_columns(table_name)
+    def _alter_table(self, table_name: str, data: DataType) -> NoReturn:
+        """Alter table to accomodate given data."""
+        columns = self._infer_columns_from_data(data)
+        existing_columns = self._get_table_columns(table_name)
         columns = [c for c in columns if c[0] not in existing_columns]
 
         if columns:
@@ -85,7 +99,8 @@ class SqlDict(object):
                 sql = 'ALTER TABLE %s ADD COLUMN %s %s' % (table_name, column_name, column_type)
                 self.cursor.execute(sql)
 
-    def select_data(self, table_name, exclude_auto_id=False, **args):
+    def _select_data(self, table_name: str, exclude_auto_id=False, **args) -> List[DataType]:
+        """Query data with given criteria."""
         keys = list(args.keys())
         values = [args[k] for k in keys]
         sql = 'SELECT * FROM `%s`' % table_name
@@ -98,35 +113,44 @@ class SqlDict(object):
         data = self.cursor.fetchall()
 
         # filter out None values
-        data = [{k:v for k, v in d.items() if v is not None} for d in data]
+        data = [{k: v for k, v in d.items() if v is not None} for d in data]
 
         # filter out auto id (_id)
         if exclude_auto_id:
-            data = [{k:v for k, v in d.items() if k != '_id'} for d in data]
+            data = [{k: v for k, v in d.items() if k != '_id'} for d in data]
 
         return data
 
 
 class SqlDictTable(object):
-    def __init__(self, db, table_name):
+    def __init__(self, db: SqlDict, table_name: str):
         self.db = db
         self.table_name = table_name
 
-    def put(self, data):
-        self.db.open()
-        self.db.insert_data(self.table_name, data)
-        self.db.close()
+    def put(self, obj: DataType) -> NoReturn:
+        """Put object into table."""
+        self.db._open()
+        self.db._insert_data(self.table_name, obj)
+        self.db._close()
 
-    def get(self, exclude_auto_id=False, **args):
-        items = self.filter(exclude_auto_id=exclude_auto_id, **args)
-        if items:
-            return items[0]
+    def put_multi(self, objs: List[DataType]) -> NoReturn:
+        """Put multiple objects into table."""
+        self.db._open()
+        for obj in objs:
+            self.db._insert_data(self.table_name, obj)
+        self.db._close()
+
+    def get(self, exclude_auto_id=False, **args) -> DataType:
+        """Get the first object using given criteria."""
+        objs = self.filter(exclude_auto_id=exclude_auto_id, **args)
+        if objs:
+            return objs[0]
         else:
             return None
 
-    def filter(self, exclude_auto_id=False, **args):
-        self.db.open()
-        data = self.db.select_data(self.table_name, exclude_auto_id=exclude_auto_id, **args)
-        self.db.close()
-        return data
-
+    def filter(self, exclude_auto_id=False, **args) -> List[DataType]:
+        """Get all objects using given criteria."""
+        self.db._open()
+        objs = self.db._select_data(self.table_name, exclude_auto_id=exclude_auto_id, **args)
+        self.db._close()
+        return objs
