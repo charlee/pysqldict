@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Dict, List, Tuple, Union, NewType, NoReturn
+from typing import Dict, List, Union, NewType, NoReturn
 
 DataValueType = NewType('DataValueType', Union[int, float, str])
 DataType = NewType('DataType', Dict[str, DataValueType])
@@ -25,6 +25,8 @@ class SqlDict(object):
 
     def _close(self):
         self.db.close()
+        self.db = None
+        self.cursor = None
 
     def table(self, table_name: str) -> 'SqlDictTable':
         return SqlDictTable(self, table_name)
@@ -92,10 +94,10 @@ class SqlDict(object):
         """Alter table to accomodate given data."""
         columns = self._infer_columns_from_data(data)
         existing_columns = self._get_table_columns(table_name)
-        columns = [c for c in columns if c[0] not in existing_columns]
+        columns = {k:v for k, v in columns.items() if k not in existing_columns}
 
         if columns:
-            for column_name, column_type in columns:
+            for column_name, column_type in columns.items():
                 sql = 'ALTER TABLE %s ADD COLUMN %s %s' % (table_name, column_name, column_type)
                 self.cursor.execute(sql)
 
