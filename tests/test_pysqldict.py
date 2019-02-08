@@ -57,7 +57,7 @@ class SqlDictSqlTestCase(unittest.TestCase):
         self.db.cursor.execute('PRAGMA table_info(%s)' % table_name)
         columns = self.db.cursor.fetchall()
         columns = [{'name': c['name'], 'type': c['type'], 'pk': c['pk']} for c in columns]
-        columns.sort(key=lambda c:c['name'])
+        columns.sort(key=lambda c: c['name'])
         self.assertListEqual(columns, expected_columns)
 
     def test_create_table(self):
@@ -78,3 +78,122 @@ class SqlDictSqlTestCase(unittest.TestCase):
             {'name': 'int2', 'type': 'INTEGER', 'pk': 0},
             {'name': 'text2', 'type': 'TEXT', 'pk': 0},
         ])
+
+    def test_infer_columns_from_data(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        columns = self.db._infer_columns_from_data(data)
+        self.assertDictEqual(columns, {
+            'float': 'REAL',
+            'int': 'INTEGER',
+            'text': 'TEXT',
+        })
+
+    def test_infer_columns_from_data_exception(self):
+        data = {'list': [1,2,3]}
+        with self.assertRaises(TypeError):
+            self.db._infer_columns_from_data(data)
+
+    def test_columns_to_sql(self):
+        columns = {
+            'float': 'REAL',
+            'int': 'INTEGER',
+            'text': 'TEXT',
+        }
+        sql = self.db._columns_to_sql(columns)
+        self.assertIn('float REAL', sql)
+        self.assertIn('int INTEGER', sql)
+        self.assertIn('text TEXT', sql)
+
+    def test_insert_data(self):
+        """_insert_data should create table automatically."""
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t2', data)
+        self.db.cursor.execute('SELECT int, text, float FROM t2')
+        result = self.db.cursor.fetchone()
+        self.assertDictEqual(result, data)
+
+    def test_insert_data_alter_table(self):
+        """_insert_data should alter table automatically."""
+        data1 = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t2', data1)
+
+        data2 = {**data1, 'other': 'test'}
+        self.db._insert_data('t2', data2)
+
+        self.db.cursor.execute('SELECT int, text, float, other FROM t2')
+        results = self.db.cursor.fetchall()
+
+        self.assertDictEqual(results[0], {**data1, 'other': None})
+        self.assertDictEqual(results[1], data2)
+
+
+    def test_select_data(self):
+        data = [
+            {'int': 1, 'text': 'hello', 'float': 1.5},
+            {'int': 2, 'text': 'hello 2', 'float': 2.5},
+        ]
+        for d in data:
+            self.db._insert_data('t1', d)
+        results = self.db._select_data('t1')
+        self.assertDictContainsSubset(data[0], results[0])
+        self.assertDictContainsSubset(data[1], results[1])
+
+    def test_select_data_exclude_auto_id(self):
+        data = [
+            {'int': 1, 'text': 'hello', 'float': 1.5},
+            {'int': 2, 'text': 'hello 2', 'float': 2.5},
+        ]
+        for d in data:
+            self.db._insert_data('t1', d)
+        results = self.db._select_data('t1', exclude_auto_id=True)
+        self.assertDictEqual(data[0], results[0])
+        self.assertDictEqual(data[1], results[1])
+
+
+class SqlDictTableTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.db = SqlDict(':memory:')
+        self.table = self.db.table('t1')
+    
+    @patch('pysqldict.SqlDict._close')
+    def test_put(self, mock_close):
+        """put should store an object into the database."""
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.table.put(data)
+        results = self.db._select_data('t1', exclude_auto_id=True)
+        self.assertDictEqual(results[0], data)
+
+    @patch('pysqldict.SqlDict._close')
+    def test_put_multi(self, mock_close):
+        data = [
+            {'int': 1, 'text': 'hello', 'float': 1.5},
+            {'int': 2, 'text': 'hello 2', 'float': 2.5},
+        ]
+        self.table.put_multi(data)
+        results = self.db._select_data('t1', exclude_auto_id=True)
+        self.assertDictEqual(results[0], data[0])
+        self.assertDictEqual(results[1], data[1])
+
+    def test_get(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._open()
+        self.db._insert_data('t1', data)
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            result = self.table.get(exclude_auto_id=True)
+            self.assertDictEqual(result, data)
+
+    def test_filter(self):
+        data = [
+            {'int': 1, 'text': 'hello', 'float': 1.5},
+            {'int': 2, 'text': 'hello 2', 'float': 2.5},
+        ]
+        self.db._open()
+        for d in data:
+            self.db._insert_data('t1', d)
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            results = self.table.filter(exclude_auto_id=True)
+            self.assertDictEqual(results[0], data[0])
+            self.assertDictEqual(results[1], data[1])

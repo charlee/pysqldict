@@ -106,7 +106,6 @@ class SqlDict(object):
         keys = list(args.keys())
         values = [args[k] for k in keys]
         sql = 'SELECT * FROM `%s`' % table_name
-
         if keys:
             criteria = ' AND '.join(['%s=?' % k for k in keys])
             sql = sql + ' WHERE ' + criteria
