@@ -94,7 +94,7 @@ class SqlDict(object):
         """Alter table to accomodate given data."""
         columns = self._infer_columns_from_data(data)
         existing_columns = self._get_table_columns(table_name)
-        columns = {k:v for k, v in columns.items() if k not in existing_columns}
+        columns = {k: v for k, v in columns.items() if k not in existing_columns}
 
         if columns:
             for column_name, column_type in columns.items():
