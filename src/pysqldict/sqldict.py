@@ -1,9 +1,4 @@
 import sqlite3
-from typing import Dict, List, Union, NewType, NoReturn
-
-DataValueType = NewType('DataValueType', Union[int, float, str])
-DataType = NewType('DataType', Dict[str, DataValueType])
-ColumnMapType = NewType('ColumnMapType', Dict[str, str])
 
 
 def dict_factory(cursor, row):
@@ -15,7 +10,7 @@ def dict_factory(cursor, row):
 
 
 class SqlDict(object):
-    def __init__(self, filename: str):
+    def __init__(self, filename):
         self.dbname = filename
 
     def _open(self):
@@ -28,10 +23,10 @@ class SqlDict(object):
         self.db = None
         self.cursor = None
 
-    def table(self, table_name: str) -> 'SqlDictTable':
+    def table(self, table_name):
         return SqlDictTable(self, table_name)
 
-    def _ensure_table(self, table_name: str, data: DataType) -> NoReturn:
+    def _ensure_table(self, table_name, data):
         """Create or alter table according to data to ensure data is insertable."""
         sql = "SELECT tbl_name FROM sqlite_master WHERE tbl_name=?"
         self.cursor.execute(sql, (table_name,))
@@ -42,7 +37,7 @@ class SqlDict(object):
         else:
             self._alter_table(table_name, data)
 
-    def _insert_data(self, table_name: str, data: DataType) -> NoReturn:
+    def _insert_data(self, table_name, data):
         """Insert data into table_name."""
         sql = "INSERT INTO `%s` (%s) VALUES (%s)" % (
             table_name,
@@ -56,7 +51,7 @@ class SqlDict(object):
             self._ensure_table(table_name, data)
             self.cursor.execute(sql, list(data.values()))
 
-    def _infer_columns_from_data(self, data: DataValueType) -> ColumnMapType:
+    def _infer_columns_from_data(self, data):
         """Infer column types from given data."""
         columns = {}
         for k, v in data.items():
@@ -72,25 +67,25 @@ class SqlDict(object):
 
         return columns
 
-    def _columns_to_sql(self, columns: ColumnMapType) -> str:
+    def _columns_to_sql(self, columns):
         """Join column definitions into SQL expression."""
         return ', '.join('%s %s' % (k, v) for k, v in columns.items())
 
-    def _get_table_columns(self, table_name: str) -> ColumnMapType:
+    def _get_table_columns(self, table_name):
         """Get the column map for an existing table."""
         sql = 'PRAGMA table_info(%s)' % table_name
         self.cursor.execute(sql)
         columns = self.cursor.fetchall()
         return {c['name']: c['type'] for c in columns}
 
-    def _create_table(self, table_name: str, data: DataType) -> NoReturn:
+    def _create_table(self, table_name, data):
         """Create table from given data."""
         columns = self._infer_columns_from_data(data)
         sql = 'CREATE TABLE `%s` (_id INTEGER PRIMARY KEY AUTOINCREMENT, %s)' % (
             table_name, self._columns_to_sql(columns))
         self.cursor.execute(sql)
 
-    def _alter_table(self, table_name: str, data: DataType) -> NoReturn:
+    def _alter_table(self, table_name, data):
         """Alter table to accomodate given data."""
         columns = self._infer_columns_from_data(data)
         existing_columns = self._get_table_columns(table_name)
@@ -101,7 +96,7 @@ class SqlDict(object):
                 sql = 'ALTER TABLE %s ADD COLUMN %s %s' % (table_name, column_name, column_type)
                 self.cursor.execute(sql)
 
-    def _select_data(self, table_name: str, exclude_auto_id=False, **args) -> List[DataType]:
+    def _select_data(self, table_name: str, exclude_auto_id=False, **args):
         """Query data with given criteria."""
         keys = list(args.keys())
         values = [args[k] for k in keys]
@@ -124,24 +119,24 @@ class SqlDict(object):
 
 
 class SqlDictTable(object):
-    def __init__(self, db: SqlDict, table_name: str):
+    def __init__(self, db, table_name):
         self.db = db
         self.table_name = table_name
 
-    def put(self, obj: DataType) -> NoReturn:
+    def put(self, obj):
         """Put object into table."""
         self.db._open()
         self.db._insert_data(self.table_name, obj)
         self.db._close()
 
-    def put_multi(self, objs: List[DataType]) -> NoReturn:
+    def put_multi(self, objs):
         """Put multiple objects into table."""
         self.db._open()
         for obj in objs:
             self.db._insert_data(self.table_name, obj)
         self.db._close()
 
-    def get(self, exclude_auto_id=False, **args) -> DataType:
+    def get(self, exclude_auto_id=False, **args):
         """Get the first object using given criteria."""
         objs = self.filter(exclude_auto_id=exclude_auto_id, **args)
         if objs:
@@ -149,7 +144,7 @@ class SqlDictTable(object):
         else:
             return None
 
-    def filter(self, exclude_auto_id=False, **args) -> List[DataType]:
+    def filter(self, exclude_auto_id=False, **args):
         """Get all objects using given criteria."""
         self.db._open()
         objs = self.db._select_data(self.table_name, exclude_auto_id=exclude_auto_id, **args)
