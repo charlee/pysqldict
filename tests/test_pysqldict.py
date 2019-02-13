@@ -126,13 +126,17 @@ class SqlDictSqlTestCase(unittest.TestCase):
         data1 = {'int': 1, 'text': 'hello', 'float': 1.5}
         self.db._insert_data('t2', data1)
 
-        data2 = {'other': 'test', **data1}
+        data2 = dict(data1)
+        data2.update({'other': 'test'})
         self.db._insert_data('t2', data2)
 
         self.db.cursor.execute('SELECT int, text, float, other FROM t2')
         results = self.db.cursor.fetchall()
 
-        self.assertDictEqual(results[0], {**data1, 'other': None})
+        data1_expected = dict(data1)
+        data1_expected.update({'other': None})
+
+        self.assertDictEqual(results[0], data1_expected)
         self.assertDictEqual(results[1], data2)
 
     def test_select_data(self):
@@ -143,8 +147,8 @@ class SqlDictSqlTestCase(unittest.TestCase):
         for d in data:
             self.db._insert_data('t1', d)
         results = self.db._select_data('t1')
-        self.assertDictContainsSubset(data[0], results[0])
-        self.assertDictContainsSubset(data[1], results[1])
+        self.assertTrue(set(data[0].items()) <= set(results[0].items()))
+        self.assertTrue(set(data[1].items()) <= set(results[1].items()))
 
     def test_select_data_exclude_auto_id(self):
         data = [
