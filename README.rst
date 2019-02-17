@@ -11,7 +11,7 @@ Overview
       - |docs|
     * - tests
       - | |travis|
-.. |docs| image:: ttps://readthedocs.org/projects/pysqldict/badge/?style=flat
+.. |docs| image:: https://readthedocs.org/projects/pysqldict/badge/?style=flat
     :target: ttps://readthedocs.org/projects/pysqldict
     :alt: Documentation Status
 
@@ -36,7 +36,7 @@ Documentation
 =============
 
 
-ttps://pysqldict.readthedocs.io/
+https://pysqldict.readthedocs.io/
 
 
 Development
