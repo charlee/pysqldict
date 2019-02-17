@@ -50,6 +50,7 @@ class SqlDict(object):
         except sqlite3.OperationalError:
             self._ensure_table(table_name, data)
             self.cursor.execute(sql, list(data.values()))
+            self.cursor.execute('COMMIT')
 
     def _infer_columns_from_data(self, data):
         """Infer column types from given data."""
