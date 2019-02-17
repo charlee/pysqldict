@@ -15,6 +15,9 @@ class SqlDict(object):
 
     def _open(self):
         self.db = sqlite3.connect(self.dbname)
+
+        # Enable autocommit
+        self.db.isolation_level = None
         self.db.row_factory = dict_factory
         self.cursor = self.db.cursor()
 
@@ -46,11 +49,9 @@ class SqlDict(object):
         )
         try:
             self.cursor.execute(sql, list(data.values()))
-            self.cursor.execute('COMMIT')
         except sqlite3.OperationalError:
             self._ensure_table(table_name, data)
             self.cursor.execute(sql, list(data.values()))
-            self.cursor.execute('COMMIT')
 
     def _infer_columns_from_data(self, data):
         """Infer column types from given data."""
