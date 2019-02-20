@@ -161,6 +161,16 @@ class SqlDictSqlTestCase(unittest.TestCase):
         self.assertDictEqual(data[0], results[0])
         self.assertDictEqual(data[1], results[1])
 
+    def test_update_data(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+        data['int'] = 2
+        self.db._update_data('t1', data)
+        result = self.db._select_data('t1', int=2)[0]
+        self.assertDictEqual(data, result)
+
+
 
 class SqlDictTableTestCase(unittest.TestCase):
 

@@ -97,7 +97,7 @@ class SqlDict(object):
                 sql = 'ALTER TABLE %s ADD COLUMN %s %s' % (table_name, column_name, column_type)
                 self.cursor.execute(sql)
 
-    def _select_data(self, table_name: str, exclude_auto_id=False, **args):
+    def _select_data(self, table_name, exclude_auto_id=False, **args):
         """Query data with given criteria."""
         keys = list(args.keys())
         values = [args[k] for k in keys]
@@ -117,6 +117,17 @@ class SqlDict(object):
             data = [{k: v for k, v in d.items() if k != '_id'} for d in data]
 
         return data
+
+    def _update_data(self, table_name, data):
+        keys = [k for k in data.keys() if k != '_id']
+        sql = 'UPDATE %s SET %s WHERE _id=?' % (
+            table_name,
+            ', '.join('%s=?' % k for k in keys),
+        )
+
+        values = [data[k] for k in keys]
+        values.append(data['_id'])
+        self.cursor.execute(sql, values)
 
 
 class SqlDictTable(object):
@@ -144,6 +155,17 @@ class SqlDictTable(object):
             return objs[0]
         else:
             return None
+
+    def update(self, obj):
+        """Update one object. Note that auto assigned `_id` attribute must
+        exist before invoking update.
+        """
+        if '_id' not in obj:
+            raise ValueError('_id does not exist in object.')
+
+        self.db._open()
+        self.db._update_data(self.table_name, obj)
+        self.db._close()
 
     def filter(self, exclude_auto_id=False, **args):
         """Get all objects using given criteria."""
