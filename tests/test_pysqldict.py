@@ -161,6 +161,23 @@ class SqlDictSqlTestCase(unittest.TestCase):
         self.assertDictEqual(data[0], results[0])
         self.assertDictEqual(data[1], results[1])
 
+    def test_update_data(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+        data['int'] = 2
+        self.db._update_data('t1', data)
+        result = self.db._select_data('t1', int=2)[0]
+        self.assertDictEqual(data, result)
+
+    def test_delete_data(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+        self.db._delete_data('t1', data['_id'])
+        result = self.db._select_data('t1')
+        self.assertEqual(result, [])
+
 
 class SqlDictTableTestCase(unittest.TestCase):
 
@@ -233,3 +250,34 @@ class SqlDictTableTestCase(unittest.TestCase):
         with unittest.mock.patch('pysqldict.SqlDict._open'):
             result = self.table.get(int=2, exclude_auto_id=True)
             self.assertIsNone(result)
+
+    def test_update(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._open()
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with unittest.mock.patch('pysqldict.SqlDict._close'):
+                data['int'] = 2
+                self.table.update(data)
+                result = self.table.get(int=2)
+                self.assertEqual(data, result)
+
+    def test_update_no_id(self):
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with self.assertRaises(ValueError):
+                self.table.update({})
+
+    def test_delete(self):
+        """delete() should delete specified data from db."""
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._open()
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with unittest.mock.patch('pysqldict.SqlDict._close'):
+                self.table.delete(data['_id'])
+                result = self.table.get(int=1)
+                self.assertIsNone(result)
