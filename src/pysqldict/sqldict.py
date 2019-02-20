@@ -119,15 +119,21 @@ class SqlDict(object):
         return data
 
     def _update_data(self, table_name, data):
+        """Update data based on data['_id']."""
         keys = [k for k in data.keys() if k != '_id']
-        sql = 'UPDATE %s SET %s WHERE _id=?' % (
+        sql = 'UPDATE `%s` SET %s WHERE `_id`=?' % (
             table_name,
-            ', '.join('%s=?' % k for k in keys),
+            ', '.join('`%s`=?' % k for k in keys),
         )
 
         values = [data[k] for k in keys]
         values.append(data['_id'])
         self.cursor.execute(sql, values)
+
+    def _delete_data(self, table_name, id):
+        """Delete data where _id=id."""
+        sql = 'DELETE FROM `%s` WHERE `_id`=?' % table_name
+        self.cursor.execute(sql, (id,))
 
 
 class SqlDictTable(object):
@@ -173,3 +179,8 @@ class SqlDictTable(object):
         objs = self.db._select_data(self.table_name, exclude_auto_id=exclude_auto_id, **args)
         self.db._close()
         return objs
+
+    def delete(self, id):
+        self.db._open()
+        self.db._delete_data(self.table_name, id)
+        self.db._close()

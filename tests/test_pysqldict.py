@@ -170,6 +170,13 @@ class SqlDictSqlTestCase(unittest.TestCase):
         result = self.db._select_data('t1', int=2)[0]
         self.assertDictEqual(data, result)
 
+    def test_delete_data(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+        self.db._delete_data('t1', data['_id'])
+        result = self.db._select_data('t1')
+        self.assertEqual(result, [])
 
 
 class SqlDictTableTestCase(unittest.TestCase):
@@ -262,3 +269,15 @@ class SqlDictTableTestCase(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.table.update({})
 
+    def test_delete(self):
+        """delete() should delete specified data from db."""
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._open()
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with unittest.mock.patch('pysqldict.SqlDict._close'):
+                self.table.delete(data['_id'])
+                result = self.table.get(int=1)
+                self.assertIsNone(result)
