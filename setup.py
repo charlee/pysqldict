@@ -25,7 +25,7 @@ def read(*names, **kwargs):
 
 setup(
     name='pysqldict',
-    version='0.1.0',
+    version='0.1.1',
     license='MIT license',
     description='A library that allows python dictionaries to be stored in SQLite and provides a simple interface for read and write.',
     long_description='%s\n%s' % (
