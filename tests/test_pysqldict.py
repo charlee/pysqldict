@@ -243,3 +243,22 @@ class SqlDictTableTestCase(unittest.TestCase):
         with unittest.mock.patch('pysqldict.SqlDict._open'):
             result = self.table.get(int=2, exclude_auto_id=True)
             self.assertIsNone(result)
+
+    def test_update(self):
+        data = {'int': 1, 'text': 'hello', 'float': 1.5}
+        self.db._open()
+        self.db._insert_data('t1', data)
+        data = self.db._select_data('t1', int=1)[0]
+
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with unittest.mock.patch('pysqldict.SqlDict._close'):
+                data['int'] = 2
+                self.table.update(data)
+                result = self.table.get(int=2)
+                self.assertEqual(data, result)
+
+    def test_update_no_id(self):
+        with unittest.mock.patch('pysqldict.SqlDict._open'):
+            with self.assertRaises(ValueError):
+                self.table.update({})
+
